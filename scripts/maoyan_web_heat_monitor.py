@@ -14,7 +14,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from html.parser import HTMLParser
 from typing import Optional
 from zoneinfo import ZoneInfo
@@ -22,7 +22,11 @@ from zoneinfo import ZoneInfo
 
 MAOYAN_URL = "https://piaofang.maoyan.com/web-heat"
 MAOYAN_REFERER = "https://piaofang.maoyan.com/"
-TZ_SHANGHAI = ZoneInfo("Asia/Shanghai")
+try:
+    TZ_SHANGHAI = ZoneInfo("Asia/Shanghai")
+except Exception:
+    # 容器缺少 tzdata 时的兜底（仍尽量用北京时间）
+    TZ_SHANGHAI = timezone(timedelta(hours=8), name="Asia/Shanghai")
 DEFAULT_TOP_N = 10
 
 

@@ -1,0 +1,11 @@
+FROM python:3.13-slim
+
+# 需要 tzdata 才能在容器内使用 ZoneInfo("Asia/Shanghai")
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends tzdata ca-certificates \
+  && rm -rf /var/lib/apt/lists/*
+
+ENV PYTHONUNBUFFERED=1
+
+WORKDIR /app
+

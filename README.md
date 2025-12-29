@@ -31,36 +31,26 @@ cp .env.example .env
 
 ## Docker 运行（推荐）
 
-### 方式A：构建本项目镜像（推荐）
+### 推荐：自用基础镜像（更简单，且可复用）
 
-在 Unraid 上（示例路径：`/mnt/user/appdata/DramaRadar`）构建一次：
+思路：只构建一个“基础 Python 镜像”，后续脚本都用它来跑（通过挂载代码目录获取最新脚本），避免“改脚本就要重建项目镜像”的维护成本。
+
+1) 在 Unraid 上构建一次基础镜像（示例路径：`/mnt/user/appdata/DramaRadar`）：
 
 ```bash
-docker build -t dramaradar:latest /mnt/user/appdata/DramaRadar
+docker build -t dramaradar-python:3.13 -f /mnt/user/appdata/DramaRadar/Dockerfile.base /mnt/user/appdata/DramaRadar
 ```
+
+2) 运行一次：
 
 ```bash
 docker run --rm \
   --env-file "/mnt/user/appdata/DramaRadar/.env" \
+  -v "/mnt/user/appdata/DramaRadar:/app" \
   -v "/mnt/user/appdata/DramaRadar/data:/app/data" \
-  dramaradar:latest
-```
-
-通用构建命令（在仓库目录执行）：
-
-构建镜像：
-
-```bash
-docker build -t dramaradar:latest .
-```
-
-运行一次（将 `data/` 挂载出来以持久化数据库）：
-
-```bash
-docker run --rm \
-  --env-file .env \
-  -v "$(pwd)/data:/app/data" \
-  dramaradar:latest
+  -w /app \
+  dramaradar-python:3.13 \
+  python scripts/maoyan_web_heat_monitor.py
 ```
 
 ## 定时执行（Unraid 推荐）
@@ -74,25 +64,28 @@ docker run --rm \
 set -euo pipefail
 
 APP_DIR="/mnt/user/appdata/DramaRadar"
-IMAGE_NAME="dramaradar:latest"
+BASE_IMAGE="dramaradar-python:3.13"
 
-# 首次或镜像不存在才构建；平时定时任务只跑容器
-if ! docker image inspect "$IMAGE_NAME" >/dev/null 2>&1; then
-  docker build -t "$IMAGE_NAME" "$APP_DIR"
+# 仅首次或镜像不存在时构建基础镜像（日常定时不需要每次构建）
+if ! docker image inspect "$BASE_IMAGE" >/dev/null 2>&1; then
+  docker build -t "$BASE_IMAGE" -f "$APP_DIR/Dockerfile.base" "$APP_DIR"
 fi
 
 docker run --rm \
   --name dramaradar_job \
   --env-file "$APP_DIR/.env" \
+  -v "$APP_DIR:/app" \
   -v "$APP_DIR/data:/app/data" \
-  "$IMAGE_NAME"
+  -w /app \
+  "$BASE_IMAGE" \
+  python scripts/maoyan_web_heat_monitor.py
 ```
 
 同样的脚本模板也在仓库里：`scripts/run_unraid.sh`。
 
-### 方式B：直接使用官方 Python 镜像（备选）
+### 备选：直接使用官方 Python 镜像
 
-不构建镜像，直接用官方 Python 镜像临时运行：
+不构建基础镜像，直接用官方 Python 镜像临时运行：
 
 ```bash
 docker run --rm \
