@@ -1,0 +1,44 @@
+# 新建项目默认忽略规则
+# Node / Rust 常见目录
+/target
+/node_modules
+/dist
+
+# Python 常见忽略
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.venv/
+venv/
+.env
+.env.local
+.env.*.local
+.pytest_cache/
+.mypy_cache/
+.tox/
+coverage/
+.coverage
+
+# 包管理器 / 构建缓存
+.cache/
+.npm/
+.pnpm-store/
+.yarn/
+
+# 日志 / 临时文件
+*.log
+*.tmp
+*.swp
+*.swo
+
+# 本项目运行数据 / 本地配置（含敏感信息）
+/data/
+/config/local.json
+
+# IDE / 系统文件
+.DS_Store
+Thumbs.db
+desktop.ini
+.idea/
+.vscode/
