@@ -12,6 +12,7 @@ import sys
 import time
 import urllib.error
 import urllib.request
+import urllib.parse
 from dataclasses import dataclass
 from datetime import datetime
 from html.parser import HTMLParser
@@ -100,6 +101,24 @@ def load_telegram_from_env() -> dict[str, str]:
     bot_token = os.environ.get("TG_BOT_TOKEN", "").strip()
     chat_id = os.environ.get("TG_CHAT_ID", "").strip()
     return {"bot_token": bot_token, "chat_id": chat_id}
+
+
+def get_telegram_api_base_url() -> str:
+    """
+    Telegram API Base URL（用于代理）。
+    - 未设置时：默认 https://api.telegram.org
+    - 设置 TG_API_BASE_URL 时：使用该地址（会自动去掉末尾 /）
+    """
+    default_base = "https://api.telegram.org"
+    raw = os.environ.get("TG_API_BASE_URL", "").strip()
+    if not raw:
+        return default_base
+
+    base = raw.rstrip("/")
+    parsed = urllib.parse.urlparse(base)
+    if parsed.scheme not in ("http", "https") or not parsed.netloc:
+        raise RuntimeError("TG_API_BASE_URL 格式不正确：必须是 http/https URL，例如 https://tg.example.com")
+    return base
 
 
 def fetch_maoyan_html(timeout_sec: int = 15, retries: int = 3, verbose: bool = False) -> str:
@@ -309,9 +328,10 @@ def build_telegram_text(new_items: list[DramaItem], dt: datetime) -> str:
 
 def send_telegram_message(bot_token: str, chat_id: str, text: str, timeout_sec: int = 15) -> None:
     if not bot_token or not chat_id:
-        raise RuntimeError("缺少TG配置：请设置TG_BOT_TOKEN/TG_CHAT_ID或在config/local.json中配置")
+        raise RuntimeError("缺少TG配置：请设置环境变量 TG_BOT_TOKEN / TG_CHAT_ID")
 
-    url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
+    base_url = get_telegram_api_base_url()
+    url = f"{base_url}/bot{bot_token}/sendMessage"
     payload = json.dumps(
         {"chat_id": chat_id, "text": text, "disable_web_page_preview": True},
         ensure_ascii=False,

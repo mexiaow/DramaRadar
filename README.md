@@ -1,6 +1,6 @@
 # DramaRadar
 
-新剧上线监控（当前实现：猫眼「网播热度」新剧发现 → Telegram 群提醒）。
+新剧上线监控（当前实现：猫眼「网播热度」新剧发现 → Telegram 提醒）。
 
 ## 功能
 
@@ -12,24 +12,46 @@
 
 ## 快速开始
 
-1. 设置环境变量（建议用 `.env` 或你的部署平台密钥管理，不要提交到仓库）：
+1. 准备 `.env`：
+
+```bash
+cp .env.example .env
+```
+
+编辑 `.env` 填入以下变量：
 
 - `TG_BOT_TOKEN`：你的机器人 Token
-- `TG_CHAT_ID`：群组 ID（例如：`-1001889081739`）
+- `TG_CHAT_ID`：群组/频道 ID（例如：`-1001889081739`）
+- `TG_API_BASE_URL`：Telegram API 代理地址（可选；不设置则默认 `https://api.telegram.org`）
 
-1. 手动运行一次：
+1. 运行一次（推荐用 Docker，避免依赖宿主机 Python）：见下方「Docker 运行」。
 
-```powershell
-py "scripts/maoyan_web_heat_monitor.py"
+## Docker 运行（推荐）
+
+### 方式A：直接使用官方 Python 镜像
+
+```bash
+docker run --rm \
+  --env-file "/mnt/user/appdata/DramaRadar/.env" \
+  -v "/mnt/user/appdata/DramaRadar:/app" \
+  -v "/mnt/user/appdata/DramaRadar/data:/app/data" \
+  -w /app \
+  python:3.13-slim \
+  python scripts/maoyan_web_heat_monitor.py
 ```
 
 仅演练不发 TG：
 
-```powershell
-py "scripts/maoyan_web_heat_monitor.py" --dry-run
+```bash
+docker run --rm \
+  --env-file "/mnt/user/appdata/DramaRadar/.env" \
+  -v "/mnt/user/appdata/DramaRadar:/app" \
+  -w /app \
+  python:3.13-slim \
+  python scripts/maoyan_web_heat_monitor.py --dry-run
 ```
 
-## Docker 运行（推荐）
+### 方式B：构建本项目镜像（可选）
 
 构建镜像：
 
@@ -41,8 +63,7 @@ docker build -t dramaradar .
 
 ```bash
 docker run --rm \
-  -e TG_BOT_TOKEN="你的token" \
-  -e TG_CHAT_ID="-1001889081739" \
+  --env-file .env \
   -v "$(pwd)/data:/app/data" \
   dramaradar
 ```
