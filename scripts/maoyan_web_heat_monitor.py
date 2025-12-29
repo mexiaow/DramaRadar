@@ -11,8 +11,8 @@ import sqlite3
 import sys
 import time
 import urllib.error
-import urllib.request
 import urllib.parse
+import urllib.request
 from dataclasses import dataclass
 from datetime import datetime
 from html.parser import HTMLParser
@@ -23,6 +23,7 @@ from zoneinfo import ZoneInfo
 MAOYAN_URL = "https://piaofang.maoyan.com/web-heat"
 MAOYAN_REFERER = "https://piaofang.maoyan.com/"
 TZ_SHANGHAI = ZoneInfo("Asia/Shanghai")
+DEFAULT_TOP_N = 10
 
 
 @dataclass(frozen=True)
@@ -101,6 +102,44 @@ def load_telegram_from_env() -> dict[str, str]:
     bot_token = os.environ.get("TG_BOT_TOKEN", "").strip()
     chat_id = os.environ.get("TG_CHAT_ID", "").strip()
     return {"bot_token": bot_token, "chat_id": chat_id}
+
+
+def load_dotenv_if_present(env_path: str) -> None:
+    """
+    轻量 .env 加载器（不依赖第三方库）。
+    规则：
+    - 仅在环境变量未设置时才从 .env 填充（避免覆盖部署环境/容器传入值）
+    - 支持 KEY=VALUE，忽略空行与 # 注释
+    - 支持 export KEY=VALUE
+    - 支持用单/双引号包裹的值
+    """
+    if not env_path:
+        return
+    if not os.path.exists(env_path):
+        return
+
+    try:
+        with open(env_path, "r", encoding="utf-8") as f:
+            for raw_line in f:
+                line = raw_line.strip()
+                if not line or line.startswith("#"):
+                    continue
+                if line.lower().startswith("export "):
+                    line = line[7:].strip()
+                if "=" not in line:
+                    continue
+                key, value = line.split("=", 1)
+                key = key.strip()
+                value = value.strip()
+                if not key:
+                    continue
+                if key in os.environ and os.environ.get(key, "").strip():
+                    continue
+                if (value.startswith('"') and value.endswith('"')) or (value.startswith("'") and value.endswith("'")):
+                    value = value[1:-1]
+                os.environ[key] = value
+    except OSError as e:
+        raise RuntimeError(f"读取 .env 失败：{env_path}；原因：{e}") from e
 
 
 def get_telegram_api_base_url() -> str:
@@ -326,6 +365,23 @@ def build_telegram_text(new_items: list[DramaItem], dt: datetime) -> str:
     return "\n".join(lines)
 
 
+def format_item_for_log(it: DramaItem) -> str:
+    if it.platform and it.is_first_day:
+        return f"- {it.name}（{it.platform}；上线首日）"
+    if it.platform:
+        return f"- {it.name}（{it.platform}）"
+    return f"- {it.name}"
+
+
+def log_items(title: str, items: list[DramaItem], limit: int = 200) -> None:
+    print(f"[INFO] {title}（{len(items)}部）")
+    shown = items[:limit]
+    for it in shown:
+        print(format_item_for_log(it))
+    if len(items) > limit:
+        print(f"[INFO] 仅展示前 {limit} 部，剩余 {len(items) - limit} 部已省略")
+
+
 def send_telegram_message(bot_token: str, chat_id: str, text: str, timeout_sec: int = 15) -> None:
     if not bot_token or not chat_id:
         raise RuntimeError("缺少TG配置：请设置环境变量 TG_BOT_TOKEN / TG_CHAT_ID")
@@ -362,12 +418,29 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
+def get_top_n_from_env() -> int:
+    raw = os.environ.get("DRAMARADAR_TOP_N", "").strip()
+    if not raw:
+        return DEFAULT_TOP_N
+    try:
+        n = int(raw)
+    except ValueError as e:
+        raise RuntimeError("DRAMARADAR_TOP_N 必须是整数，例如 10") from e
+    if n <= 0 or n > 100:
+        raise RuntimeError("DRAMARADAR_TOP_N 范围应为 1~100")
+    return n
+
+
 def main(argv: list[str]) -> int:
     args = parse_args(argv)
+    load_dotenv_if_present(os.environ.get("DRAMARADAR_ENV_FILE", ".env"))
     tg = load_telegram_from_env()
 
     html = fetch_maoyan_html(verbose=bool(args.verbose))
     items = parse_drama_items(html)
+    top_n = get_top_n_from_env()
+    items = items[:top_n]
+    log_items("本次抓取到的剧集", items)
 
     dt = now_shanghai()
     db_path = str(args.db_path)
@@ -393,6 +466,10 @@ def main(argv: list[str]) -> int:
             return 0
 
         new_items = db_find_new_items(conn, items)
+        if new_items:
+            log_items("本次新出现的剧集", new_items)
+        else:
+            print("[INFO] 本次无新剧出现")
 
         if args.dry_run:
             print(f"[DRY] 本次抓取到 {len(items)} 部；新增 {len(new_items)} 部；不写入、不发送TG")
