@@ -27,7 +27,8 @@ TZ_SHANGHAI = ZoneInfo("Asia/Shanghai")
 @dataclass(frozen=True)
 class DramaItem:
     name: str
-    info: str
+    platform: str
+    is_first_day: bool
 
 
 class MaoyanWebHeatParser(HTMLParser):
@@ -76,9 +77,8 @@ class MaoyanWebHeatParser(HTMLParser):
             if text:
                 self.names.append(text)
         elif self._current == "info":
-            # 让“上线X天”等信息更易读
-            normalized = text.replace("上线", " 上线").strip()
-            self.infos.append(normalized)
+            # 原始信息：如“腾讯视频独播 上线8天”“芒果TV独播 上线首日”
+            self.infos.append(text)
 
         self._current = None
         self._buffer = []
@@ -146,6 +146,21 @@ def fetch_maoyan_html(timeout_sec: int = 15, retries: int = 3, verbose: bool = F
     raise RuntimeError(f"抓取失败：已耗尽重试次数；最后错误：{last_error}")
 
 
+def extract_platform(info: str) -> str:
+    """
+    从“平台 + 上线X天/首日”中提取稳定的“平台”部分，避免天数导致每日无意义变化。
+    """
+    if not info:
+        return ""
+    idx = info.find("上线")
+    base = info[:idx] if idx >= 0 else info
+    return " ".join(base.split()).strip()
+
+
+def is_first_day_info(info: str) -> bool:
+    return "上线首日" in (info or "")
+
+
 def parse_drama_items(html: str) -> list[DramaItem]:
     parser = MaoyanWebHeatParser()
     parser.feed(html)
@@ -155,8 +170,14 @@ def parse_drama_items(html: str) -> list[DramaItem]:
 
     items: list[DramaItem] = []
     for i, name in enumerate(parser.names):
-        info = parser.infos[i] if i < len(parser.infos) else ""
-        items.append(DramaItem(name=name, info=info))
+        raw_info = parser.infos[i] if i < len(parser.infos) else ""
+        items.append(
+            DramaItem(
+                name=name,
+                platform=extract_platform(raw_info),
+                is_first_day=is_first_day_info(raw_info),
+            )
+        )
 
     # 去重：同名只保留首次出现的那条
     unique: dict[str, DramaItem] = {}
@@ -211,7 +232,7 @@ def db_insert_baseline(conn: sqlite3.Connection, items: list[DramaItem], dt: dat
             INSERT OR IGNORE INTO dramas(name, first_seen, last_seen, last_info, source)
             VALUES(?, ?, ?, ?, ?)
             """,
-            [(it.name, day, day, it.info, MAOYAN_URL) for it in items],
+            [(it.name, day, day, it.platform, MAOYAN_URL) for it in items],
         )
         conn.execute(
             "INSERT OR REPLACE INTO meta(key, value) VALUES(?, ?)",
@@ -240,7 +261,7 @@ def db_upsert_items(conn: sqlite3.Connection, items: list[DramaItem], dt: dateti
                   last_seen=excluded.last_seen,
                   last_info=CASE WHEN excluded.last_info != '' THEN excluded.last_info ELSE dramas.last_info END
                 """,
-                (it.name, day, day, it.info, MAOYAN_URL),
+                (it.name, day, day, it.platform, MAOYAN_URL),
             )
         conn.execute(
             "INSERT OR REPLACE INTO meta(key, value) VALUES(?, ?)",
@@ -251,7 +272,12 @@ def db_upsert_items(conn: sqlite3.Connection, items: list[DramaItem], dt: dateti
 def build_telegram_text(new_items: list[DramaItem], dt: datetime) -> str:
     lines: list[str] = [f"🎯 发现猫眼网播热度新剧（{len(new_items)}部）"]
     for it in new_items:
-        lines.append(f"- {it.name}（{it.info}）" if it.info else f"- {it.name}")
+        if it.platform and it.is_first_day:
+            lines.append(f"- {it.name}（{it.platform}；上线首日）")
+        elif it.platform:
+            lines.append(f"- {it.name}（{it.platform}）")
+        else:
+            lines.append(f"- {it.name}")
     lines.append(f"来源：{MAOYAN_URL}")
     lines.append(f"时间：{shanghai_datetime_str(dt)}")
     return "\n".join(lines)
