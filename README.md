@@ -21,7 +21,7 @@ cp .env.example .env
 编辑 `.env` 填入以下变量：
 
 - `TG_BOT_TOKEN`：你的机器人 Token
-- `TG_CHAT_ID`：群组/频道 ID（例如：`-1001889081739`）
+- `TG_CHAT_ID`：群组/频道 ID（例如：`-100123123123`）
 - `TG_API_BASE_URL`：Telegram API 代理地址（可选；不设置则默认 `https://api.telegram.org`）
 - `DRAMARADAR_TOP_N`：抓取榜单前 N（可选；默认 10）
 
@@ -41,7 +41,7 @@ cp .env.example .env
 docker build -t dramaradar-python:3.13 -f /mnt/user/appdata/DramaRadar/Dockerfile.base /mnt/user/appdata/DramaRadar
 ```
 
-2) 运行一次：
+1) 运行一次：
 
 ```bash
 docker run --rm \
