@@ -181,17 +181,7 @@ def open_db(db_path: str) -> sqlite3.Connection:
     if db_dir:
         os.makedirs(db_dir, exist_ok=True)
     conn = sqlite3.connect(db_path)
-    conn.execute(
-        """
-        CREATE TABLE IF NOT EXISTS dramas (
-          name TEXT PRIMARY KEY,
-          first_seen TEXT NOT NULL,
-          last_seen TEXT NOT NULL,
-          last_info TEXT NOT NULL,
-          source TEXT NOT NULL
-        )
-        """
-    )
+    ensure_db_schema(conn)
     conn.execute(
         """
         CREATE TABLE IF NOT EXISTS meta (
@@ -209,6 +199,49 @@ def open_db_readonly(db_path: str) -> sqlite3.Connection:
     return sqlite3.connect(uri, uri=True)
 
 
+def ensure_db_schema(conn: sqlite3.Connection) -> None:
+    """
+    维护数据库表结构：
+    - 当前版本不再把 URL/source 存入数据库（避免无意义冗余）
+    - 若发现旧库仍含 source 且为 NOT NULL，则自动迁移到新结构
+    """
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS dramas (
+          name TEXT PRIMARY KEY,
+          first_seen TEXT NOT NULL,
+          last_seen TEXT NOT NULL,
+          last_info TEXT NOT NULL
+        )
+        """
+    )
+
+    cols = [row[1] for row in conn.execute("PRAGMA table_info(dramas)")]
+    if "source" not in cols:
+        return
+
+    # 旧库迁移：重建表以移除 source 列（兼容 SQLite 版本，不依赖 DROP COLUMN）
+    with conn:
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS dramas_new (
+              name TEXT PRIMARY KEY,
+              first_seen TEXT NOT NULL,
+              last_seen TEXT NOT NULL,
+              last_info TEXT NOT NULL
+            )
+            """
+        )
+        conn.execute(
+            """
+            INSERT OR REPLACE INTO dramas_new(name, first_seen, last_seen, last_info)
+            SELECT name, first_seen, last_seen, last_info FROM dramas
+            """
+        )
+        conn.execute("DROP TABLE dramas")
+        conn.execute("ALTER TABLE dramas_new RENAME TO dramas")
+
+
 def db_is_empty(conn: sqlite3.Connection) -> bool:
     cur = conn.execute("SELECT COUNT(1) FROM dramas")
     count = int(cur.fetchone()[0])
@@ -220,10 +253,10 @@ def db_insert_baseline(conn: sqlite3.Connection, items: list[DramaItem], dt: dat
     with conn:
         conn.executemany(
             """
-            INSERT OR IGNORE INTO dramas(name, first_seen, last_seen, last_info, source)
-            VALUES(?, ?, ?, ?, ?)
+            INSERT OR IGNORE INTO dramas(name, first_seen, last_seen, last_info)
+            VALUES(?, ?, ?, ?)
             """,
-            [(it.name, day, day, it.platform, MAOYAN_URL) for it in items],
+            [(it.name, day, day, it.platform) for it in items],
         )
         conn.execute(
             "INSERT OR REPLACE INTO meta(key, value) VALUES(?, ?)",
@@ -246,13 +279,13 @@ def db_upsert_items(conn: sqlite3.Connection, items: list[DramaItem], dt: dateti
         for it in items:
             conn.execute(
                 """
-                INSERT INTO dramas(name, first_seen, last_seen, last_info, source)
-                VALUES(?, ?, ?, ?, ?)
+                INSERT INTO dramas(name, first_seen, last_seen, last_info)
+                VALUES(?, ?, ?, ?)
                 ON CONFLICT(name) DO UPDATE SET
                   last_seen=excluded.last_seen,
                   last_info=CASE WHEN excluded.last_info != '' THEN excluded.last_info ELSE dramas.last_info END
                 """,
-                (it.name, day, day, it.platform, MAOYAN_URL),
+                (it.name, day, day, it.platform),
             )
         conn.execute(
             "INSERT OR REPLACE INTO meta(key, value) VALUES(?, ?)",

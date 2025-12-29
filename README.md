@@ -17,7 +17,7 @@
 - `TG_BOT_TOKEN`：你的机器人 Token
 - `TG_CHAT_ID`：群组 ID（例如：`-1001889081739`）
 
-2. 手动运行一次：
+1. 手动运行一次：
 
 ```powershell
 py "scripts/maoyan_web_heat_monitor.py"
@@ -46,14 +46,3 @@ docker run --rm \
   -v "$(pwd)/data:/app/data" \
   dramaradar
 ```
-
-## 关于机器人共用
-
-同一个 Telegram Bot Token 可以被多个程序同时调用（例如都只调用 `sendMessage`），一般没问题。
-
-可能的弊端：
-
-- Token 一旦泄露，所有程序都受影响（建议仅放本地配置或环境变量）
-- 多程序同时发消息会共享 Telegram 的限流/配额与消息顺序（可能出现“先后顺序不稳定”）
-
-如果你希望隔离风险、区分来源或未来要做更复杂的交互，建议单独申请一个新机器人。
