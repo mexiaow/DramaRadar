@@ -31,6 +31,7 @@ class DramaItem:
     name: str
     platform: str
     is_first_day: bool
+    online_desc: str
 
 
 class MaoyanWebHeatParser(HTMLParser):
@@ -208,6 +209,18 @@ def is_first_day_info(info: str) -> bool:
     return "上线首日" in (info or "")
 
 
+def extract_online_desc(info: str) -> str:
+    """
+    提取“上线X天/上线首日”等动态信息，仅用于通知/日志展示，不写入数据库。
+    """
+    if not info:
+        return ""
+    idx = info.find("上线")
+    if idx < 0:
+        return ""
+    return " ".join(info[idx:].split()).strip()
+
+
 def parse_drama_items(html: str) -> list[DramaItem]:
     parser = MaoyanWebHeatParser()
     parser.feed(html)
@@ -223,6 +236,7 @@ def parse_drama_items(html: str) -> list[DramaItem]:
                 name=name,
                 platform=extract_platform(raw_info),
                 is_first_day=is_first_day_info(raw_info),
+                online_desc=extract_online_desc(raw_info),
             )
         )
 
@@ -354,10 +368,13 @@ def db_upsert_items(conn: sqlite3.Connection, items: list[DramaItem], dt: dateti
 def build_telegram_text(new_items: list[DramaItem], dt: datetime) -> str:
     lines: list[str] = [f"🎯 发现猫眼网播热度新剧（{len(new_items)}部）"]
     for it in new_items:
-        if it.platform and it.is_first_day:
-            lines.append(f"- {it.name}（{it.platform}；上线首日）")
-        elif it.platform:
-            lines.append(f"- {it.name}（{it.platform}）")
+        parts: list[str] = []
+        if it.platform:
+            parts.append(it.platform)
+        if it.online_desc:
+            parts.append(it.online_desc)
+        if parts:
+            lines.append(f"- {it.name}（{'；'.join(parts)}）")
         else:
             lines.append(f"- {it.name}")
     lines.append(f"来源：{MAOYAN_URL}")
@@ -366,10 +383,13 @@ def build_telegram_text(new_items: list[DramaItem], dt: datetime) -> str:
 
 
 def format_item_for_log(it: DramaItem) -> str:
-    if it.platform and it.is_first_day:
-        return f"- {it.name}（{it.platform}；上线首日）"
+    parts: list[str] = []
     if it.platform:
-        return f"- {it.name}（{it.platform}）"
+        parts.append(it.platform)
+    if it.online_desc:
+        parts.append(it.online_desc)
+    if parts:
+        return f"- {it.name}（{'；'.join(parts)}）"
     return f"- {it.name}"
 
 
