@@ -21,7 +21,7 @@ cp .env.example .env
 编辑 `.env` 填入以下变量：
 
 - `TG_BOT_TOKEN`：你的机器人 Token
-- `TG_CHAT_ID`：群组/频道 ID（例如：`-10010000000`）
+- `TG_CHAT_ID`：群组/频道 ID（例如：`-1001889081739`）
 - `TG_API_BASE_URL`：Telegram API 代理地址（可选；不设置则默认 `https://api.telegram.org`）
 - `DRAMARADAR_TOP_N`：抓取榜单前 N（可选；默认 10）
 
@@ -31,7 +31,68 @@ cp .env.example .env
 
 ## Docker 运行（推荐）
 
-### 方式A：直接使用官方 Python 镜像
+### 方式A：构建本项目镜像（推荐）
+
+在 Unraid 上（示例路径：`/mnt/user/appdata/DramaRadar`）构建一次：
+
+```bash
+docker build -t dramaradar:latest /mnt/user/appdata/DramaRadar
+```
+
+```bash
+docker run --rm \
+  --env-file "/mnt/user/appdata/DramaRadar/.env" \
+  -v "/mnt/user/appdata/DramaRadar/data:/app/data" \
+  dramaradar:latest
+```
+
+通用构建命令（在仓库目录执行）：
+
+构建镜像：
+
+```bash
+docker build -t dramaradar:latest .
+```
+
+运行一次（将 `data/` 挂载出来以持久化数据库）：
+
+```bash
+docker run --rm \
+  --env-file .env \
+  -v "$(pwd)/data:/app/data" \
+  dramaradar:latest
+```
+
+## 定时执行（Unraid 推荐）
+
+这个项目不需要常驻运行，按计划每天跑一次即可。
+
+推荐安装 Unraid 的 `User Scripts` 插件，然后创建一个“每日”脚本执行一次容器：
+
+```bash
+#!/bin/bash
+set -euo pipefail
+
+APP_DIR="/mnt/user/appdata/DramaRadar"
+IMAGE_NAME="dramaradar:latest"
+
+# 首次或镜像不存在才构建；平时定时任务只跑容器
+if ! docker image inspect "$IMAGE_NAME" >/dev/null 2>&1; then
+  docker build -t "$IMAGE_NAME" "$APP_DIR"
+fi
+
+docker run --rm \
+  --name dramaradar_job \
+  --env-file "$APP_DIR/.env" \
+  -v "$APP_DIR/data:/app/data" \
+  "$IMAGE_NAME"
+```
+
+同样的脚本模板也在仓库里：`scripts/run_unraid.sh`。
+
+### 方式B：直接使用官方 Python 镜像（备选）
+
+不构建镜像，直接用官方 Python 镜像临时运行：
 
 ```bash
 docker run --rm \
@@ -41,32 +102,4 @@ docker run --rm \
   -w /app \
   python:3.13-slim \
   python scripts/maoyan_web_heat_monitor.py
-```
-
-仅演练不发 TG：
-
-```bash
-docker run --rm \
-  --env-file "/mnt/user/appdata/DramaRadar/.env" \
-  -v "/mnt/user/appdata/DramaRadar:/app" \
-  -w /app \
-  python:3.13-slim \
-  python scripts/maoyan_web_heat_monitor.py --dry-run
-```
-
-### 方式B：构建本项目镜像（可选）
-
-构建镜像：
-
-```bash
-docker build -t dramaradar .
-```
-
-运行一次（将 `data/` 挂载出来以持久化数据库）：
-
-```bash
-docker run --rm \
-  --env-file .env \
-  -v "$(pwd)/data:/app/data" \
-  dramaradar
 ```
