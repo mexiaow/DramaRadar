@@ -15,7 +15,7 @@ import urllib.request
 from dataclasses import dataclass
 from datetime import datetime
 from html.parser import HTMLParser
-from typing import Any, Optional
+from typing import Optional
 from zoneinfo import ZoneInfo
 
 
@@ -96,21 +96,10 @@ def shanghai_datetime_str(dt: datetime) -> str:
     return dt.strftime("%Y-%m-%d %H:%M:%S")
 
 
-def read_json_file(path: str) -> dict[str, Any]:
-    with open(path, "r", encoding="utf-8") as f:
-        return json.load(f)
-
-
-def load_config(config_path: str) -> dict[str, str]:
-    cfg: dict[str, Any] = {}
-    if os.path.exists(config_path):
-        cfg = read_json_file(config_path)
-
-    telegram = cfg.get("telegram", {}) if isinstance(cfg, dict) else {}
-    bot_token = os.environ.get("TG_BOT_TOKEN") or telegram.get("botToken") or ""
-    chat_id = os.environ.get("TG_CHAT_ID") or telegram.get("chatId") or ""
-
-    return {"bot_token": str(bot_token), "chat_id": str(chat_id)}
+def load_telegram_from_env() -> dict[str, str]:
+    bot_token = os.environ.get("TG_BOT_TOKEN", "").strip()
+    chat_id = os.environ.get("TG_CHAT_ID", "").strip()
+    return {"bot_token": bot_token, "chat_id": chat_id}
 
 
 def fetch_maoyan_html(timeout_sec: int = 15, retries: int = 3, verbose: bool = False) -> str:
@@ -188,7 +177,9 @@ def parse_drama_items(html: str) -> list[DramaItem]:
 
 
 def open_db(db_path: str) -> sqlite3.Connection:
-    os.makedirs(os.path.dirname(db_path), exist_ok=True)
+    db_dir = os.path.dirname(db_path)
+    if db_dir:
+        os.makedirs(db_dir, exist_ok=True)
     conn = sqlite3.connect(db_path)
     conn.execute(
         """
@@ -314,14 +305,13 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--dry-run", action="store_true", help="演练模式：不写DB、不发TG")
     parser.add_argument("--no-telegram", action="store_true", help="不发送TG（但仍更新DB）")
     parser.add_argument("--verbose", action="store_true", help="输出更多日志")
-    parser.add_argument("--config-path", default=os.environ.get("DRAMARADAR_CONFIG_PATH", "config/local.json"))
-    parser.add_argument("--db-path", default=os.environ.get("DRAMARADAR_DB_PATH", "data/maoyan_web_heat.sqlite3"))
+    parser.add_argument("--db-path", default=os.environ.get("DRAMARADAR_DB_PATH", "data/dramaradar.db"))
     return parser.parse_args(argv)
 
 
 def main(argv: list[str]) -> int:
     args = parse_args(argv)
-    cfg = load_config(args.config_path)
+    tg = load_telegram_from_env()
 
     html = fetch_maoyan_html(verbose=bool(args.verbose))
     items = parse_drama_items(html)
@@ -359,7 +349,7 @@ def main(argv: list[str]) -> int:
 
         if new_items and not args.no_telegram:
             text = build_telegram_text(new_items, dt)
-            send_telegram_message(cfg["bot_token"], cfg["chat_id"], text)
+            send_telegram_message(tg["bot_token"], tg["chat_id"], text)
             print("[OK] 已发送TG提醒")
         elif new_items and args.no_telegram:
             print("[OK] 检测到新剧，但按参数跳过TG发送（--no-telegram）")

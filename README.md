@@ -12,21 +12,12 @@
 
 ## 快速开始
 
-1. 复制配置模板为本地配置（该文件已在 `.gitignore` 中忽略，不会被提交）：
+1. 设置环境变量（建议用 `.env` 或你的部署平台密钥管理，不要提交到仓库）：
 
-```powershell
-New-Item -ItemType Directory -Force -Path "config" | Out-Null
-Copy-Item "config/config.example.json" "config/local.json"
-```
+- `TG_BOT_TOKEN`：你的机器人 Token
+- `TG_CHAT_ID`：群组 ID（例如：`-1001889081739`）
 
-2. 编辑 `config/local.json`：
-
-- `telegram.botToken`：你的机器人 Token（不要提交到仓库）
-- `telegram.chatId`：群组 ID（例如：`-1001889081739`）
-
-也支持环境变量（优先级更高）：`TG_BOT_TOKEN`、`TG_CHAT_ID`。
-
-3. 手动运行一次：
+2. 手动运行一次：
 
 ```powershell
 py "scripts/maoyan_web_heat_monitor.py"
@@ -38,20 +29,22 @@ py "scripts/maoyan_web_heat_monitor.py"
 py "scripts/maoyan_web_heat_monitor.py" --dry-run
 ```
 
-## Windows 定时任务（推荐）
+## Docker 运行（推荐）
 
-用“任务计划程序”创建一个“每日”任务，操作命令建议如下（按你的实际路径调整）：
+构建镜像：
 
-```text
-程序/脚本：py
-添加参数：k:\Projects\DramaRadar\scripts\maoyan_web_heat_monitor.py
-起始于：k:\Projects\DramaRadar
+```bash
+docker build -t dramaradar .
 ```
 
-也可以用命令行创建（示例：每天 09:00 执行一次）：
+运行一次（将 `data/` 挂载出来以持久化数据库）：
 
-```powershell
-schtasks /Create /F /TN "DramaRadar_MaoyanWebHeat" /SC DAILY /ST 09:00 /TR "py \"k:\Projects\DramaRadar\scripts\maoyan_web_heat_monitor.py\""
+```bash
+docker run --rm \
+  -e TG_BOT_TOKEN="你的token" \
+  -e TG_CHAT_ID="-1001889081739" \
+  -v "$(pwd)/data:/app/data" \
+  dramaradar
 ```
 
 ## 关于机器人共用
