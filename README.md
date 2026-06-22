@@ -5,7 +5,7 @@
 ## 功能
 
 - 每次抓取 `https://piaofang.maoyan.com/web-heat`
-- 仅提取榜单前 10 的电视剧片名（含平台/上线天数等简要信息）
+- 仅提取榜单前 30 的电视剧片名（含平台/上线天数等简要信息）
 - 用 SQLite 持久化去重记录（无需清理，扩展更方便）
 - 发现新剧后通过 TG 机器人向群组发送提醒
 - 首次运行只建立“基线”，不发送提醒（避免把存量剧集当成新剧刷屏）
@@ -23,7 +23,7 @@ cp .env.example .env
 - `TG_BOT_TOKEN`：你的机器人 Token
 - `TG_CHAT_ID`：群组/频道 ID（例如：`-100123123123`）
 - `TG_API_BASE_URL`：Telegram API 代理地址（可选；不设置则默认 `https://api.telegram.org`）
-- `DRAMARADAR_TOP_N`：抓取榜单前 N（可选；默认 10）
+- `DRAMARADAR_TOP_N`：抓取榜单前 N（可选；默认 30）
 
 直接用 `py` 运行时，脚本会自动读取当前目录下的 `.env` 并加载到环境变量（也可用 `DRAMARADAR_ENV_FILE` 指定 `.env` 路径）。
 

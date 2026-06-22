@@ -27,7 +27,7 @@ try:
 except Exception:
     # 容器缺少 tzdata 时的兜底（仍尽量用北京时间）
     TZ_SHANGHAI = timezone(timedelta(hours=8), name="Asia/Shanghai")
-DEFAULT_TOP_N = 10
+DEFAULT_TOP_N = 30
 
 
 @dataclass(frozen=True)
